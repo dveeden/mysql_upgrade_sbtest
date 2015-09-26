@@ -94,6 +94,7 @@ class upgradetest:
 
     def runtest(self):
         sb = ugt.provision(self.versions[0])
+        input('Please load your data and press any key to continue')
         sb.stop()
         shutil.copytree(sb.datadir, '/tmp/ugtdatadir')
 
