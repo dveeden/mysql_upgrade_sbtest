@@ -1,11 +1,15 @@
 #!/usr/bin/python3
+import logging
 import os
 import shutil
-import time
-import logging
 import subprocess
+import time
 
 import mysql.connector
+
+def port_for_version(version):
+    v = version.split('.')
+    return int(v[0]) * 1000 + int(v[1]) * 100 + int(v[2])
 
 class mysqlsandbox:
     def __init__(self, version, prefix, sbbasedir):
@@ -15,15 +19,15 @@ class mysqlsandbox:
         self.datafrom = 'script'
 
     def provision(self):
-        logging.debug('SB Provisioning %s (datafrom: %s)' % 
-                       (self.version, self.datafrom))
+        logging.debug('SB Provisioning %s (datafrom: %s)',
+                      self.version, self.datafrom)
         subprocess.call(['make_sandbox', self.version,
                          '--add_prefix=%s' % self.prefix,
                          '--', '--no_confirm', '--no_show',
                          '--datadir_from', self.datafrom])
 
     def deprovision(self):
-        logging.debug('SB Deprovisioning %s' % self.version) 
+        logging.debug('SB Deprovisioning %s', self.version) 
         subprocess.call(['sbtool', '-o', 'delete',
                          '--source_dir', self.sbdir])
 
@@ -40,8 +44,9 @@ class mysqlsandbox:
     def sbcmd(self, cmd):
         cwd = os.getcwd()
         os.chdir(self.sbdir)
-        subprocess.call(cmd)
+        output = subprocess.check_output(cmd)
         os.chdir(cwd)
+        return output
  
     def stop(self):
         self.sbcmd('./stop')
@@ -50,7 +55,10 @@ class mysqlsandbox:
         self.sbcmd('./start')
 
     def upgrade(self):
-        self.sbcmd(['./my', 'sql_upgrade', '--skip-verbose'])
+        output = self.sbcmd(['./my', 'sql_upgrade', '--skip-verbose'])
+        for line in output.decode('utf-8').splitlines():
+            if not line.endswith('OK'):
+                print(line)
 
 
 class upgradetest:
@@ -59,6 +67,7 @@ class upgradetest:
     sbbasedir = '~/sandboxes'
     ugtdatadir = '/tmp/ugtdatadir'
     sandboxes = {}
+    callbacks = {}
 
     def provision(self, version, datafrom=''):
         logging.debug('UGT Provisioning %s' % version)
@@ -93,23 +102,106 @@ class upgradetest:
             logging.warning('Can\'t remove non-existing ugtdatadir')
 
     def runtest(self):
-        sb = ugt.provision(self.versions[0])
-        input('Please load your data and press any key to continue')
-        sb.stop()
-        shutil.copytree(sb.datadir, '/tmp/ugtdatadir')
-
-        for version in self.versions[1:]:
-            sb = ugt.provision(version, datafrom='dir:/tmp/ugtdatadir')
+        initial = True
+        for version in self.versions:
+            if initial is True:
+                sb = ugt.provision(version)
+                initial = False
+            else:
+                sb = ugt.provision(version, datafrom='dir:/tmp/ugtdatadir')
             sb.start()
+            self.runcb(version, 'preupgrade')
             sb.upgrade()
+            self.runcb(version, 'postupgrade')
             sb.stop()
             self.rmugtdatadir()
             shutil.copytree(sb.datadir, '/tmp/ugtdatadir')
+
+    def registercb(self, version, event, fn):
+        if not version in self.callbacks:
+            self.callbacks[version] = {}
+            if not event in self.callbacks[version]:
+                self.callbacks[version][event] = []
+        self.callbacks[version][event].append(fn)
+
+    def runcb(self, version, event):
+        if version in self.callbacks:
+            if event in self.callbacks[version]:
+                cnconfig = { 'host': '127.0.0.1', 'port': port_for_version(version),
+                             'user': 'root', 'password': 'msandbox',
+                             'database': 'test'}
+                logging.debug('Running callback for %s event for version %s' 
+                              % (event, version))
+                for cb in self.callbacks[version][event]:
+                    cb(cnconfig)
   
+def cb_51_par(cnconfig):
+    logging.info('Creating t_51_par1 with partitioning on 5.1')
+    con = mysql.connector.connect(**cnconfig)
+    cur = con.cursor()
+    cur.execute('''CREATE TABLE t_51_par1 (
+id int auto_increment, name TEXT,
+PRIMARY KEY (id)) ENGINE=InnoDB PARTITION BY KEY(id) PARTITIONS 5''')
+    con.commit()  # Not needed because implicit commit of DDL
+    cur.close()
+    con.close()
+
+def cb_55_ug_par(cnconfig):
+    logging.info('Upgrading t_51_par1 with partitioning on 5.5')
+    con = mysql.connector.connect(**cnconfig)
+    cur = con.cursor()
+    cur.execute('''ALTER TABLE `test`.`t_51_par1`
+PARTITION BY KEY /*!50531 ALGORITHM = 1 */ (id) PARTITIONS 5''')
+    con.commit()  # Not needed because implicit commit of DDL
+    cur.close()
+    con.close()
+
+def cb_55_cmp(cnconfig):
+    logging.info('Creating t_55_cmp1 with compression on 5.5')
+    con = mysql.connector.connect(**cnconfig)
+    cur = con.cursor()
+    cur.execute('''SET GLOBAL innodb_file_format=Barracuda''')
+    cur.execute('''SET GLOBAL innodb_file_per_table=1''')
+    cur.execute('''CREATE TABLE t_55_cmp1 (
+id int auto_increment, name TEXT,
+PRIMARY KEY (id)) ENGINE=InnoDB ROW_FORMAT=COMPRESSED''')
+    con.commit()  # Not needed because implicit commit of DDL
+    cur.close()
+    con.close()
+
+def cb_56_ft(cnconfig):
+    logging.info('Creating t_56_ft1 with fulltext index on 5.6')
+    con = mysql.connector.connect(**cnconfig)
+    cur = con.cursor()
+    cur.execute('''CREATE TABLE t_56_ft1 (
+id int auto_increment, name TEXT,
+FULLTEXT KEY `ft_name` (name),
+PRIMARY KEY (id))''')
+    con.commit()  # Not needed because implicit commit of DDL
+    cur.close()
+    con.close()
+
+def cb_57_rt(cnconfig):
+    logging.info('Creating t_57_rt1 with spatial index on 5.7')
+    con = mysql.connector.connect(**cnconfig)
+    cur = con.cursor()
+    cur.execute('''CREATE TABLE t_57_rt1 (
+id int auto_increment, poi GEOMETRY NOT NULL,
+SPATIAL KEY `rt_poi` (poi),
+PRIMARY KEY (id))''')
+    con.commit()  # Not needed because implicit commit of DDL
+    cur.close()
+    con.close()
+
 
 if __name__ == '__main__':
-    logging.basicConfig(level=logging.DEBUG)
+    logging.basicConfig(level=logging.INFO)
 
     ugt = upgradetest()
     ugt.cleanup()
+    ugt.registercb('5.1.73', 'postupgrade', cb_51_par)
+    ugt.registercb('5.5.45', 'postupgrade', cb_55_ug_par)
+    ugt.registercb('5.5.45', 'postupgrade', cb_55_cmp)
+    ugt.registercb('5.6.25', 'postupgrade', cb_56_ft)
+    ugt.registercb('5.7.9', 'postupgrade', cb_57_rt)
     ugt.runtest()
