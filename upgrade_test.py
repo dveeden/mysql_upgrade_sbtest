@@ -13,6 +13,8 @@ def port_for_version(version):
     return int(v[0]) * 1000 + int(v[1]) * 100 + int(v[2])
 
 class mysqlsandbox:
+   '''Manage a single MySQL Sandbox'''
+
     def __init__(self, version, prefix, sbbasedir):
         self.version = version
         self.prefix = prefix
@@ -63,6 +65,7 @@ class mysqlsandbox:
 
 
 class upgradetest:
+    '''Test a upgrades of MySQL with assistance of MySQL Sandbox'''
     versions = ['5.0.96', '5.1.73', '5.5.45', '5.6.25', '5.7.9']
     prefix = 'ugt'
     sbbasedir = '~/sandboxes'
@@ -119,6 +122,8 @@ class upgradetest:
             shutil.copytree(sb.datadir, '/tmp/ugtdatadir')
 
     def registercb(self, version, event, fn):
+        '''Register Callback'''
+
         if not version in self.callbacks:
             self.callbacks[version] = {}
             if not event in self.callbacks[version]:
@@ -126,6 +131,8 @@ class upgradetest:
         self.callbacks[version][event].append(fn)
 
     def runcb(self, version, event):
+        '''Run a callback function'''
+
         if version in self.callbacks:
             if event in self.callbacks[version]:
                 cnconfig = { 'host': '127.0.0.1', 'port': port_for_version(version),
@@ -137,6 +144,9 @@ class upgradetest:
                     cb(cnconfig)
 
 def ugtcb(description, sql):
+    '''Upgrade Test Call Back
+    this is a template for simple callbacks, which just run some sql
+    '''
     def ugtcb_closure(cnconfig):
         logging.info('Callback Description: {desc}'.format(desc=description))
         con = mysql.connector.connect(**cnconfig)
