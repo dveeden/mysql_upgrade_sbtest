@@ -1,4 +1,5 @@
 #!/usr/bin/python3
+import argparse
 import logging
 import os
 import shutil
@@ -134,68 +135,56 @@ class upgradetest:
                               % (event, version))
                 for cb in self.callbacks[version][event]:
                     cb(cnconfig)
-  
-def cb_51_par(cnconfig):
-    logging.info('Creating t_51_par1 with partitioning on 5.1')
-    con = mysql.connector.connect(**cnconfig)
-    cur = con.cursor()
-    cur.execute('''CREATE TABLE t_51_par1 (
+
+def ugtcb(description, sql):
+    def ugtcb_closure(cnconfig):
+        logging.info('Callback Description: {desc}'.format(desc=description))
+        con = mysql.connector.connect(**cnconfig)
+        cur = con.cursor()
+        logging.debug('Callback SQL: {sql}'.format(sql=sql))
+        cur.execute(sql, multi=True)
+        con.commit()  # Not needed because implicit commit of DDL
+        cur.close()
+        con.close()
+    return ugtcb_closure
+
+cb_51_par = ugtcb('Creating t_51_par1 with partitioning on 5.1',
+    '''CREATE TABLE t_51_par1 (
 id int auto_increment, name TEXT,
 PRIMARY KEY (id)) ENGINE=InnoDB PARTITION BY KEY(id) PARTITIONS 5''')
-    con.commit()  # Not needed because implicit commit of DDL
-    cur.close()
-    con.close()
 
-def cb_55_ug_par(cnconfig):
-    logging.info('Upgrading t_51_par1 with partitioning on 5.5')
-    con = mysql.connector.connect(**cnconfig)
-    cur = con.cursor()
-    cur.execute('''ALTER TABLE `test`.`t_51_par1`
+cb_55_ug_par = ugtcb('Upgrading t_51_par1 with partitioning on 5.5',
+    '''ALTER TABLE `test`.`t_51_par1`
 PARTITION BY KEY /*!50531 ALGORITHM = 1 */ (id) PARTITIONS 5''')
-    con.commit()  # Not needed because implicit commit of DDL
-    cur.close()
-    con.close()
 
-def cb_55_cmp(cnconfig):
-    logging.info('Creating t_55_cmp1 with compression on 5.5')
-    con = mysql.connector.connect(**cnconfig)
-    cur = con.cursor()
-    cur.execute('''SET GLOBAL innodb_file_format=Barracuda''')
-    cur.execute('''SET GLOBAL innodb_file_per_table=1''')
-    cur.execute('''CREATE TABLE t_55_cmp1 (
+cb_55_cmp = ugtcb('Creating t_55_cmp1 with compression on 5.5',
+    '''SET GLOBAL innodb_file_format=Barracuda;
+SET GLOBAL innodb_file_per_table=1;
+CREATE TABLE t_55_cmp1 (
 id int auto_increment, name TEXT,
 PRIMARY KEY (id)) ENGINE=InnoDB ROW_FORMAT=COMPRESSED''')
-    con.commit()  # Not needed because implicit commit of DDL
-    cur.close()
-    con.close()
 
-def cb_56_ft(cnconfig):
-    logging.info('Creating t_56_ft1 with fulltext index on 5.6')
-    con = mysql.connector.connect(**cnconfig)
-    cur = con.cursor()
-    cur.execute('''CREATE TABLE t_56_ft1 (
+cb_56_ft = ugtcb('Creating t_56_ft1 with fulltext index on 5.6',
+    '''CREATE TABLE t_56_ft1 (
 id int auto_increment, name TEXT,
 FULLTEXT KEY `ft_name` (name),
 PRIMARY KEY (id))''')
-    con.commit()  # Not needed because implicit commit of DDL
-    cur.close()
-    con.close()
 
-def cb_57_rt(cnconfig):
-    logging.info('Creating t_57_rt1 with spatial index on 5.7')
-    con = mysql.connector.connect(**cnconfig)
-    cur = con.cursor()
-    cur.execute('''CREATE TABLE t_57_rt1 (
+cb_57_rt = ugtcb('Creating t_57_rt1 with spatial index on 5.7',
+    '''CREATE TABLE t_57_rt1 (
 id int auto_increment, poi GEOMETRY NOT NULL,
 SPATIAL KEY `rt_poi` (poi),
 PRIMARY KEY (id))''')
-    con.commit()  # Not needed because implicit commit of DDL
-    cur.close()
-    con.close()
-
 
 if __name__ == '__main__':
-    logging.basicConfig(level=logging.INFO)
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--debug', action="store_true", help="Enable debug output")
+    args = parser.parse_args()
+
+    if args.debug:
+        logging.basicConfig(level=logging.DEBUG)
+    else:
+        logging.basicConfig(level=logging.INFO)
 
     ugt = upgradetest()
     ugt.cleanup()
