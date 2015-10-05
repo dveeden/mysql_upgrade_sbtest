@@ -158,6 +158,15 @@ def ugtcb(description, sql):
         con.close()
     return ugtcb_closure
 
+cb_41_myisam = ugtcb('Creating MyISAM table on 4.1',
+    '''CREATE TABLE t_41_myisam1 (
+id int auto_increment, name VARCHAR(255),
+poi GEOMETRY NOT NULL,
+info TEXT,
+FULLTEXT KEY(info),
+SPATIAL KEY(poi),
+PRIMARY KEY (id)) ENGINE=MyISAM''')
+
 cb_41_ib = ugtcb('Creating t_41_ib1 with InnoDB on 4.1',
     '''CREATE TABLE t_41_ib1 (
 id int auto_increment, name VARCHAR(255),
@@ -203,6 +212,7 @@ if __name__ == '__main__':
 
     ugt = upgradetest()
     ugt.cleanup()
+    ugt.registercb('4.1.21', 'postupgrade', cb_41_myisam)
     ugt.registercb('4.1.21', 'postupgrade', cb_41_ib)
     ugt.registercb('5.1.73', 'postupgrade', cb_51_par)
     ugt.registercb('5.5.45', 'postupgrade', cb_55_ug_par)
