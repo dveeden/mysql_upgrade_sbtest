@@ -188,6 +188,13 @@ CREATE TABLE t_55_cmp1 (
 id int auto_increment, name TEXT,
 PRIMARY KEY (id)) ENGINE=InnoDB ROW_FORMAT=COMPRESSED''')
 
+cb_55_par = ugtcb('Creating t_55_par1 with partitioning on 5.5',
+    '''SET GLOBAL innodb_file_per_table=1;
+CREATE TABLE t_55_par1 (
+id int auto_increment, name TEXT,
+PRIMARY KEY (id)) ENGINE=InnoDB PARTITION BY KEY(id) PARTITIONS 5''')
+
+
 cb_56_ft = ugtcb('Creating t_56_ft1 with fulltext index on 5.6',
     '''CREATE TABLE t_56_ft1 (
 id int auto_increment, name TEXT,
@@ -217,6 +224,7 @@ if __name__ == '__main__':
     ugt.registercb('5.1.73', 'postupgrade', cb_51_par)
     ugt.registercb('5.5.45', 'postupgrade', cb_55_ug_par)
     ugt.registercb('5.5.45', 'postupgrade', cb_55_cmp)
+    ugt.registercb('5.5.45', 'postupgrade', cb_55_par)
     ugt.registercb('5.6.25', 'postupgrade', cb_56_ft)
     ugt.registercb('5.7.9', 'postupgrade', cb_57_rt)
     ugt.runtest()
