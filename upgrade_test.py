@@ -13,8 +13,7 @@ def port_for_version(version):
     return int(v[0]) * 1000 + int(v[1]) * 100 + int(v[2])
 
 class mysqlsandbox:
-   '''Manage a single MySQL Sandbox'''
-
+    '''Manage a single MySQL Sandbox'''
     def __init__(self, version, prefix, sbbasedir):
         self.version = version
         self.prefix = prefix
@@ -66,7 +65,7 @@ class mysqlsandbox:
 
 class upgradetest:
     '''Test a upgrades of MySQL with assistance of MySQL Sandbox'''
-    versions = ['5.0.96', '5.1.73', '5.5.45', '5.6.25', '5.7.9']
+    versions = ['4.1.21', '5.0.96', '5.1.73', '5.5.45', '5.6.25', '5.7.9']
     prefix = 'ugt'
     sbbasedir = '~/sandboxes'
     ugtdatadir = '/tmp/ugtdatadir'
@@ -137,7 +136,7 @@ class upgradetest:
             if event in self.callbacks[version]:
                 cnconfig = { 'host': '127.0.0.1', 'port': port_for_version(version),
                              'user': 'root', 'password': 'msandbox',
-                             'database': 'test'}
+                             'database': 'test', 'get_warnings': True}
                 logging.debug('Running callback for %s event for version %s' 
                               % (event, version))
                 for cb in self.callbacks[version][event]:
@@ -152,11 +151,17 @@ def ugtcb(description, sql):
         con = mysql.connector.connect(**cnconfig)
         cur = con.cursor()
         logging.debug('Callback SQL: {sql}'.format(sql=sql))
-        cur.execute(sql, multi=True)
+        for result in cur.execute(sql, multi=True):
+            pass
         con.commit()  # Not needed because implicit commit of DDL
         cur.close()
         con.close()
     return ugtcb_closure
+
+cb_41_ib = ugtcb('Creating t_41_ib1 with InnoDB on 4.1',
+    '''CREATE TABLE t_41_ib1 (
+id int auto_increment, name VARCHAR(255),
+PRIMARY KEY (id)) ENGINE=InnoDB''')
 
 cb_51_par = ugtcb('Creating t_51_par1 with partitioning on 5.1',
     '''CREATE TABLE t_51_par1 (
@@ -198,6 +203,7 @@ if __name__ == '__main__':
 
     ugt = upgradetest()
     ugt.cleanup()
+    ugt.registercb('4.1.21', 'postupgrade', cb_41_ib)
     ugt.registercb('5.1.73', 'postupgrade', cb_51_par)
     ugt.registercb('5.5.45', 'postupgrade', cb_55_ug_par)
     ugt.registercb('5.5.45', 'postupgrade', cb_55_cmp)
