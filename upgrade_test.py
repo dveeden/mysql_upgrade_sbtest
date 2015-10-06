@@ -167,10 +167,15 @@ FULLTEXT KEY(info),
 SPATIAL KEY(poi),
 PRIMARY KEY (id)) ENGINE=MyISAM''')
 
-cb_41_ib = ugtcb('Creating t_41_ib1 with InnoDB on 4.1',
+cb_41_ib = ugtcb('Creating InnoDB table on 4.1',
     '''CREATE TABLE t_41_ib1 (
 id int auto_increment, name VARCHAR(255),
 PRIMARY KEY (id)) ENGINE=InnoDB''')
+
+cb_41_ar = ugtcb('Creating Archive table on 4.1',
+    '''CREATE TABLE t_41_ar1 (
+id int, name VARCHAR(255)
+) ENGINE=Archive''')
 
 cb_51_par = ugtcb('Creating t_51_par1 with partitioning on 5.1',
     '''CREATE TABLE t_51_par1 (
@@ -193,7 +198,6 @@ cb_55_par = ugtcb('Creating t_55_par1 with partitioning on 5.5',
 CREATE TABLE t_55_par1 (
 id int auto_increment, name TEXT,
 PRIMARY KEY (id)) ENGINE=InnoDB PARTITION BY KEY(id) PARTITIONS 5''')
-
 
 cb_56_ft = ugtcb('Creating t_56_ft1 with fulltext index on 5.6',
     '''CREATE TABLE t_56_ft1 (
@@ -220,6 +224,7 @@ if __name__ == '__main__':
     ugt = upgradetest()
     ugt.cleanup()
     ugt.registercb('4.1.21', 'postupgrade', cb_41_myisam)
+    ugt.registercb('4.1.21', 'postupgrade', cb_41_ar)
     ugt.registercb('4.1.21', 'postupgrade', cb_41_ib)
     ugt.registercb('5.1.73', 'postupgrade', cb_51_par)
     ugt.registercb('5.5.45', 'postupgrade', cb_55_ug_par)
