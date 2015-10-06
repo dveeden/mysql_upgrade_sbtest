@@ -12,6 +12,8 @@ It uses `mysql_upgrade` to do a inplace upgrade.
 * Multiple MySQL versions, registered with MySQL Sandbox
 * Python 3
 
+If you can't find old versions on https://dev.mysql.com then have a look at http://mysql.mirror.facebook.net/.
+
 ## Todo
 
 ### Run certain operations in certain steps of the upgrade.
